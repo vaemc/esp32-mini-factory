@@ -1,17 +1,9 @@
 <template>
   <div>
-    <a-modal
-      v-model:visible="firmwareModal.visible"
-      :title="firmwareModal.title"
-      @ok="firmwareModalOk"
-    >
+    <a-modal v-model:visible="firmwareModal.visible" :title="firmwareModal.title" @ok="firmwareModalOk">
       <a-form :label-col="{ span: 4 }">
         <a-form-item label="路径" name="description">
-          <a-input-search
-            enter-button="选择固件"
-            v-model:value="firmware.path"
-            @search="openFileDialog(firmware)"
-          />
+          <a-input-search enter-button="选择固件" v-model:value="firmware.path" @search="openFileDialog(firmware)" />
         </a-form-item>
 
         <a-form-item label="烧录地址" name="address">
@@ -32,24 +24,16 @@
       <a-card size="small" title="烧录选项" style="width: 100%">
         <template #extra>
           <a-space :size="5">
-            <a-button type="primary" @click="firmwareModal.visible = true"
-              >添加固件</a-button
-            >
+            <a-button type="primary" @click="addFirmwareBtn()">添加固件</a-button>
           </a-space>
         </template>
 
-        <a-table
-          :pagination="false"
-          :dataSource="firmwareList"
-          :columns="columns"
-          size="small"
-          class="scroll"
-          :scroll="{ y: 500 }"
-        >
+        <a-table :pagination="false" :dataSource="firmwareList" :columns="columns" size="small" class="scroll"
+          :scroll="{ y: 500 }">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'action'">
-              <a @click="editData(record)">编辑</a> |
-              <a @click="removeData(record)">删除</a>
+              <a @click="editFirmwareBtn(record)">编辑</a> |
+              <a @click="removeFirmwareBtn(record)">删除</a>
             </template>
           </template>
         </a-table>
@@ -60,62 +44,24 @@
         <template #extra>
           <div>
             <a-space :size="5">
-              <a-button type="primary">刷新串口列表</a-button>
-              <a-select
-                placeholder="选择芯片"
-                :options="chipTypeOptionList"
-                style="width: 130px"
-              >
+              <a-button type="primary" @click="refreshSerialPort">刷新串口列表</a-button>
+              <a-select placeholder="选择芯片" :options="chipTypeOptionList" style="width: 130px">
               </a-select>
               <a-button type="primary">开始烧录</a-button>
             </a-space>
           </div>
         </template>
         <div style="display: flex; flex-wrap: wrap">
-          <div
-            v-for="item in serialPortList"
-            style="flex-basis: 50%; padding: 5px"
-          >
+          <div v-for="item in serialPortList" style="flex-basis: 50%; padding: 5px">
             <a-card :title="item" style="" size="small">
               <template #extra>
-                <a-checkbox checked="true">烧录</a-checkbox></template
-              >
+                <a-checkbox checked="true">烧录</a-checkbox></template>
 
-              <a-input-search
-                size="small"
-                style="margin: 2px"
-                placeholder=""
-                suffix="0x"
-                enter-button="选择"
-              />
-              <a-input-search
-                size="small"
-                style="margin: 2px"
-                placeholder=""
-                suffix="0x"
-                enter-button="选择"
-              />
-              <a-input-search
-                size="small"
-                style="margin: 2px"
-                placeholder=""
-                suffix="0x"
-                enter-button="选择"
-              />
-              <a-input-search
-                size="small"
-                style="margin: 2px"
-                placeholder=""
-                suffix="0x"
-                enter-button="选择"
-              />
-              <a-input-search
-                size="small"
-                style="margin: 2px"
-                placeholder=""
-                suffix="0x"
-                enter-button="选择"
-              />
+              <div v-for="item in firmwareList">
+
+                <a-input-search size="small" :value="item.path" style="margin: 2px" placeholder="" :suffix="item.address" enter-button="选择" />
+              </div>
+
             </a-card>
           </div>
         </div>
@@ -130,6 +76,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/dialog";
 import { message } from "ant-design-vue";
 import { Firmware } from "../model";
+import { log } from "console";
 async function getSerialPortList() {
   let data = (await invoke("get_serial_port_list")) as string;
   return JSON.parse(data);
@@ -137,11 +84,34 @@ async function getSerialPortList() {
 
 const firmware = ref({} as Firmware);
 const firmwareList = ref([] as Firmware[]);
-const firmwareModal = ref({ visible: false, title: "添加固件" });
+const firmwareModal = ref({ visible: false, title: "添加固件", isEdit: false });
+
+const serialPortList = ref(await getSerialPortList());
+
 const firmwareModalOk = () => {
+  console.log(firmware.value);
+
+  if (firmware.value.path === "" || firmware.value.path == null) {
+    message.warning("请选择固件路径");
+    return;
+  }
+  if (firmware.value.address === "" || firmware.value.address == null) {
+    message.warning("请填写固件烧录地址");
+    return;
+  }
+
+  if (firmwareModal.value.isEdit) {
+    firmwareModal.value.visible = false;
+    return;
+  }
+
   firmwareModal.value.visible = false;
   firmwareList.value.push(firmware.value);
 };
+
+const refreshSerialPort = async () => {
+  serialPortList.value = await getSerialPortList();
+}
 
 const openFileDialog = async (obj: any) => {
   const selected = await open({
@@ -151,6 +121,32 @@ const openFileDialog = async (obj: any) => {
   if (!Array.isArray(selected) && selected !== null) {
     obj.path = selected;
   }
+};
+
+const addFirmwareBtn = () => {
+  firmwareModal.value.visible = true
+  firmwareModal.value.title = "添加固件"
+  firmwareModal.value.isEdit = false;
+
+  firmware.value = {
+    path: "",
+    address: "",
+  }
+};
+
+const removeFirmwareBtn = (item: Firmware) => {
+  firmwareList.value = firmwareList.value.filter(
+    (x: Firmware) => x.path != item.path
+  );
+  message.success("删除成功！");
+};
+
+const editFirmwareBtn = (item: Firmware) => {
+  firmwareModal.value.visible = true
+  firmwareModal.value.title = `编辑固件`
+  firmwareModal.value.isEdit = true;
+
+  firmware.value = item
 };
 
 const chipTypeList = ref([
@@ -201,15 +197,7 @@ const columns = ref([
   },
 ]);
 
-const serialPortList = ref(await getSerialPortList());
 
-const removeData = (item: Firmware) => {
-  firmwareList.value = firmwareList.value.filter(
-    (x: Firmware) => x.path != item.path
-  );
-  message.success("删除成功！");
-};
-const editData = (item: Firmware) => {};
 
-console.log(serialPortList);
+
 </script>
